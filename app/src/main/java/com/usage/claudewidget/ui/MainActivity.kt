@@ -6,16 +6,19 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.webkit.WebSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -27,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.usage.claudewidget.auth.LoginActivity
+import com.usage.claudewidget.data.AuthState
 import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Storage
 import com.usage.claudewidget.data.UsageRepository
@@ -69,8 +73,27 @@ private fun SetupScreen() {
         Text("Claude Usage Widget", style = MaterialTheme.typography.headlineSmall)
         Text(status, style = MaterialTheme.typography.bodyMedium)
 
-        Button(onClick = { loginLauncher.launch(Intent(context, LoginActivity::class.java)) }) {
-            Text(if (storage.isLoggedIn) "Re-sign in" else "Sign in")
+        // Manual alternative to the WebView login: paste the sessionKey cookie from a browser
+        // (DevTools → Application → Cookies → claude.ai → sessionKey).
+        var sessionInput by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = sessionInput,
+            onValueChange = { sessionInput = it },
+            label = { Text("sessionKey (sk-ant-sid…)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            enabled = sessionInput.isNotBlank(),
+            onClick = {
+                saveSessionKey(context, storage, sessionInput.trim())
+                sessionInput = ""
+                status = describe(storage)
+            },
+        ) { Text("Save session key") }
+
+        OutlinedButton(onClick = { loginLauncher.launch(Intent(context, LoginActivity::class.java)) }) {
+            Text(if (storage.isLoggedIn) "Re-sign in (WebView)" else "Sign in (WebView)")
         }
 
         OutlinedButton(onClick = {
@@ -106,6 +129,15 @@ private fun describe(s: Storage): String = buildString {
         append("\nlast: 5H ").append(s.fiveHourUtil.toInt()).append("%  1W ")
             .append(s.sevenDayUtil.toInt()).append("%")
     }
+}
+
+private fun saveSessionKey(context: Context, storage: Storage, key: String) {
+    storage.clearCredentials()
+    storage.sessionKey = key
+    // OkHttp and the Cloudflare-solving WebView must present the same UA, since
+    // cf_clearance is bound to it.
+    storage.userAgent = WebSettings.getDefaultUserAgent(context)
+    storage.authState = AuthState.OK
 }
 
 private fun requestBatteryExemption(context: Context) {
