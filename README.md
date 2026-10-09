@@ -1,112 +1,60 @@
-<div align="center">
+# Claude Usage Widget
 
-# 🦞 Claude Usage Widget
+Android home-screen widget showing your Claude Pro/Max usage: the 5-hour and 1-week percentages and when each resets.
 
-**An Android home-screen widget for your Claude subscription usage.**
-Keeps your `5H` and `1W` percentages (plus *“resets in”* countdowns) live on your home screen.
+Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked from [utaysi/claude-usage-widget](https://github.com/utaysi/claude-usage-widget) by [utaysi](https://github.com/utaysi).
 
-![status: working](https://img.shields.io/badge/status-working-brightgreen)
-![platform: Android 8+](https://img.shields.io/badge/platform-Android%208%2B-3DDC84?logo=android&logoColor=white)
-![built with: Kotlin + Glance](https://img.shields.io/badge/built%20with-Kotlin%20%2B%20Glance-7F52FF?logo=kotlin&logoColor=white)
+<img src="docs/promo.png" alt="Widget on an Android home screen" width="720" />
 
-<br />
+## Changes in this fork
 
-<img src="docs/promo.png" alt="Claude Usage widget on an Android home screen, with a close-up of the 5H and 1W usage bars" width="720" />
+- Sign in by pasting your `sessionKey` cookie instead of using the in-app WebView login, which can fail on some phones.
+- GitHub Actions builds the APK on every push.
 
-<br />
+## Requirements
 
-### [![Download APK](https://img.shields.io/badge/⬇%20Download%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/utaysi/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)
+- A Claude Pro or Max subscription. API-key usage is not shown.
+- Android 8.0 or newer.
 
-Sign in once on the phone; the widget refreshes itself in the background.
+## Install
 
-</div>
+1. Open the [Actions](https://github.com/matias-saavedra-g/claude-usage-widget/actions) tab, select the latest successful **Build APK** run, and download the `claude-usage-widget` artifact. You must be signed in to GitHub.
+2. Unzip it and install `app-debug.apk` on your phone. Allow installs from unknown sources when asked.
+3. If you have the original app installed, uninstall it first. The two are signed with different keys.
 
----
+## Setup
 
-## 📲 Install in 3 steps
+1. In a desktop browser signed in to [claude.ai](https://claude.ai), open DevTools → Application → Cookies → `https://claude.ai` and copy the value of `sessionKey` (starts with `sk-ant-sid`).
+2. In the app, paste it, tap **Save session key**, then **Test fetch now**. The percentages should match [claude.ai/settings/usage](https://claude.ai/settings/usage).
+3. Tap **Disable battery optimization** so Android does not stop the background refresh.
+4. Add the **Claude Usage** widget to your home screen. Tap it to refresh.
 
-1. **[Download the APK](https://github.com/utaysi/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)** on your Android phone (tap the button above).
-2. **Open the downloaded file** and tap **Install**.
-3. The first time, Android asks to **allow installs from this source** (your browser or file app). Tap **Settings → enable “Allow from this source” → back → Install**. If Play Protect shows an *“unsafe app?”* prompt, that warning appears for any app not installed from the Play Store; choose **Install anyway**.
+The session key expires after a few weeks, or when you sign out of claude.ai in that browser. When the widget says to sign in, paste a new key.
 
-> Why the warnings? The APK is sideloaded rather than shipped through the Play Store, so Android plays it safe. It's the normal two-tap detour for any direct APK.
+## How it works
 
-Then continue with first-run setup below.
+The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented endpoint the claude.ai usage page uses, with your `sessionKey` cookie. It finds your organization ID on its own. When Cloudflare blocks a request, the app loads claude.ai in a hidden WebView to get a new `cf_clearance` cookie and retries. A background job refreshes every 15 minutes.
 
-## 👋 First-run setup
+The widget has a compact and a full layout depending on its size, and follows the system light or dark theme. An amber dot means the data is out of date.
 
-1. Open the **Claude Usage** app and tap **Sign in**, then complete the normal `claude.ai` login in the WebView. It closes automatically once it captures your session.
-2. Tap **Test fetch now** to confirm it prints your current `5H` and `1W` percentages. These should match `claude.ai/settings/usage`.
-3. Tap **Disable battery optimization** and allow it, so Android doesn't kill the 15-minute background refresh.
-4. Long-press your home screen → **Widgets** → **Claude Usage**, drag it on, and resize it however you like. Tap it any time to refresh.
+Anthropic does not support this. It may stop working if the endpoint or Cloudflare setup changes.
 
-## 📋 Requirements
+## Security
 
-- A Claude **Pro/Max** subscription (this reads consumer subscription usage, not API-key usage).
-- **Android 8.0 (API 26)** or newer. Built and tested on a Pixel 9 / Android 16.
+The session key gives full access to your Claude account. The app stores it with `EncryptedSharedPreferences` and excludes it from backups. Never put it in the source code or share it.
 
----
+## Build locally
 
-## ⚠️ Unofficial: use at your own risk
+Requires JDK 17 and the Android SDK with platform 36.
 
-Anthropic provides no public API for subscription (Pro/Max) usage. This widget replays the same **undocumented internal endpoint** that `claude.ai/settings/usage` calls in the browser, authorized by session cookies harvested from an in-app WebView login. It can break at any time if Anthropic changes the endpoint, the auth flow, or its Cloudflare protection. It is not a sanctioned integration, so use it for your own account only.
+1. Create `local.properties` in the project root with `sdk.dir=/path/to/Android/Sdk`.
+2. Run `./gradlew :app:assembleDebug`.
+3. Install with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
 
-## ✨ Highlights
-
-- **Two rolling windows at a glance.** The 5-hour and 1-week usage percentages, with a live countdown to each reset.
-- **Refreshes itself.** A background job updates every ~15 minutes; tap the widget to force an immediate refresh.
-- **Sign in once.** A single `claude.ai` login; you only re-authenticate when the long-lived session finally expires (weeks).
-- **Resizes freely.** Snaps between a compact and a full layout, and adapts to light & dark themes.
-
-## 🛠 How it works
-
-You log in once through a real `claude.ai` WebView. The app harvests the `sessionKey` and `cf_clearance` cookies plus the WebView User-Agent, stores them encrypted on-device, and fetches usage headlessly with `OkHttp`. When a headless fetch hits Cloudflare's challenge, the app silently re-solves it in an off-screen WebView (no interaction needed while `sessionKey` is valid) and retries. A `WorkManager` job refreshes every ~15 minutes. You only sign in again when the long-lived `sessionKey` itself expires, at which point the widget shows a *“Tap to sign in”* state.
-
-The widget snaps between a **Compact** layout (mascot + two mini bars + percentages) and a **Full** layout (mascot + label + two bars with percentage and *“resets in”* for each). Both adapt to light and dark themes, and a small amber dot appears when the numbers are stale.
-
-## 🔒 Security notes
-
-Credentials (`sessionKey`, `cf_clearance`, User-Agent, org ID) are stored in `EncryptedSharedPreferences` backed by the Android Keystore, and `android:allowBackup="false"` keeps them out of cloud backups. The `sessionKey` is as sensitive as your account password (anyone who extracts it can act as you), so treat a rooted or compromised device accordingly. No secrets are stored in the repo or baked into the APK.
-
----
-
-<details>
-<summary><b>🧰 Build from source</b></summary>
-
-<br />
-
-You only need this if you want to build the APK yourself instead of downloading it.
-
-**Requirements:** JDK 17, the Android SDK with platform 36, and the bundled Gradle wrapper.
-
-**1. Point Gradle at your Android SDK** by creating `local.properties` in the project root (gitignored):
-
-```properties
-sdk.dir=/path/to/your/Android/Sdk
-```
-
-**2. Build the debug APK:**
-
-```bash
-./gradlew :app:assembleDebug
-```
-
-**3. Install it.** The APK lands at `app/build/outputs/apk/debug/app-debug.apk`. Enable USB debugging (Settings → System → Developer options → USB debugging), plug in the phone, and run:
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-Or copy that APK to the phone and tap it to sideload it directly.
-
-**Project layout:**
-
-| Path | What lives there |
+| Path | Contents |
 | --- | --- |
-| `app/.../data` | Endpoint constants, encrypted storage, cookie harvesting, the Cloudflare resolver, and the repository that orchestrates fetch, Cloudflare retry, and auth-state transitions. |
-| `auth/LoginActivity.kt` | The WebView login. |
-| `ui/MainActivity.kt` | The setup / debug screen. |
-| `widget/` | The Glance widget and its layouts. |
-| `work/` | Background refresh scheduling. |
-
-</details>
+| `data/` | Endpoints, encrypted storage, cookie handling, Cloudflare retry, fetch logic |
+| `auth/LoginActivity.kt` | WebView login |
+| `ui/MainActivity.kt` | Setup screen and session key entry |
+| `widget/` | Widget layouts |
+| `work/` | Background refresh |
