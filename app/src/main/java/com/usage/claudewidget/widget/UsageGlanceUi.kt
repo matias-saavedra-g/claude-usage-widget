@@ -8,7 +8,6 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.cornerRadius
@@ -59,7 +58,7 @@ fun UsageWidgetContent(state: WidgetState) {
     val tap = if (state.needsLogin) {
         actionStartActivity(Intent(context, MainActivity::class.java))
     } else {
-        actionRunCallback<RefreshAction>()
+        actionStartActivity(Intent(context, TapActivity::class.java))
     }
 
     Box(

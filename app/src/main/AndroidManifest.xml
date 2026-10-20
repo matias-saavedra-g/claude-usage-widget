@@ -33,6 +33,15 @@
             android:exported="false"
             android:label="@string/sign_in" />
 
+        <!-- Widget tap trampoline: no window, own task, so it never surfaces MainActivity. -->
+        <activity
+            android:name=".widget.TapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
+
         <receiver
             android:name=".widget.UsageWidgetReceiver"
             android:exported="false">
