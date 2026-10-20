@@ -1,8 +1,11 @@
 package com.usage.claudewidget.ui
 
+import android.Manifest
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -21,6 +24,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +68,16 @@ private fun SetupScreen() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         status = describe(storage)
+    }
+
+    // The 5-hour reset notification needs this on Android 13+.
+    val notifLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {}
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     Column(
@@ -116,6 +130,12 @@ private fun SetupScreen() {
             Text("Disable battery optimization")
         }
 
+        if (needsExactAlarmGrant(context)) {
+            OutlinedButton(onClick = { requestExactAlarms(context) }) {
+                Text("Allow on-time reset notification")
+            }
+        }
+
         if (debug.isNotBlank()) {
             Text(debug, style = MaterialTheme.typography.titleMedium)
         }
@@ -148,5 +168,17 @@ private fun requestBatteryExemption(context: Context) {
             Uri.parse("package:${context.packageName}")
         )
         context.startActivity(intent)
+    }
+}
+
+private fun needsExactAlarmGrant(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+        !context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
+private fun requestExactAlarms(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
+        )
     }
 }

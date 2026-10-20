@@ -10,6 +10,8 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 
 - Sign in by pasting your `sessionKey` cookie instead of using the in-app WebView login, which can fail on some phones.
 - GitHub Actions builds the APK on every push.
+- Tap the widget once to refresh, or three times quickly to open the Claude app.
+- A notification tells you when the 5-hour window resets.
 
 ## Requirements
 
@@ -27,13 +29,14 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 1. In a desktop browser signed in to [claude.ai](https://claude.ai), open DevTools → Application → Cookies → `https://claude.ai` and copy the value of `sessionKey` (starts with `sk-ant-sid`).
 2. In the app, paste it, tap **Save session key**, then **Test fetch now**. The percentages should match [claude.ai/settings/usage](https://claude.ai/settings/usage).
 3. Tap **Disable battery optimization** so Android does not stop the background refresh.
-4. Add the **Claude Usage** widget to your home screen. Tap it to refresh.
+4. Allow notifications when asked. On Android 12 or newer, tap **Allow on-time reset notification** if it appears, so the reset notification is not delayed.
+5. Add the **Claude Usage** widget to your home screen. Tap it once to refresh, or three times quickly to open the Claude app (or claude.ai if the app is not installed).
 
 The session key expires after a few weeks, or when you sign out of claude.ai in that browser. When the widget says to sign in, paste a new key.
 
 ## How it works
 
-The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented endpoint the claude.ai usage page uses, with your `sessionKey` cookie. It finds your organization ID on its own. When Cloudflare blocks a request, the app loads claude.ai in a hidden WebView to get a new `cf_clearance` cookie and retries. A background job refreshes every 15 minutes.
+The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented endpoint the claude.ai usage page uses, with your `sessionKey` cookie. It finds your organization ID on its own. When Cloudflare blocks a request, the app loads claude.ai in a hidden WebView to get a new `cf_clearance` cookie and retries. A background job refreshes every 15 minutes. After each fetch the app sets an alarm for the 5-hour reset time and posts a notification when it fires. If the alarm was lost, for example after a reboot, the next refresh sends the notification instead.
 
 The widget has a compact and a full layout depending on its size, and follows the system light or dark theme. An amber dot means the data is out of date.
 
@@ -58,3 +61,4 @@ Requires JDK 17 and the Android SDK with platform 36.
 | `ui/MainActivity.kt` | Setup screen and session key entry |
 | `widget/` | Widget layouts |
 | `work/` | Background refresh |
+| `notify/` | 5-hour reset alarm and notification |

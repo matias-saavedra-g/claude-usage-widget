@@ -4,6 +4,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- Needed on Android 11+ to find the Claude app's launch intent (triple tap). -->
+    <queries>
+        <package android:name="com.anthropic.claude" />
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -36,6 +43,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/usage_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".notify.ResetAlarmReceiver"
+            android:exported="false" />
 
     </application>
 </manifest>
