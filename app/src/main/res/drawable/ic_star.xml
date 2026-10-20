@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Four-point star in Claude's orange accent. Source: docs/logo.svg -->
+    <path
+        android:fillColor="#D97757"
+        android:pathData="M24,4 C25.2,17 31,22.8 44,24 C31,25.2 25.2,31 24,44 C22.8,31 17,25.2 4,24 C17,22.8 22.8,17 24,4 Z" />
+</vector>

@@ -8,9 +8,9 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.LinearProgressIndicator
+import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -30,6 +30,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import androidx.glance.LocalContext
 import android.content.Intent
+import android.os.Build
 import com.usage.claudewidget.R
 import com.usage.claudewidget.ui.MainActivity
 
@@ -46,9 +47,6 @@ data class WidgetState(
 
 private val COMPACT_MAX_WIDTH = 130.dp
 
-// Colors come from resources so they auto-adapt to light/dark via values-night.
-private val accent = ColorProvider(R.color.accent)
-private fun barTrack() = ColorProvider(R.color.bar_track)
 
 @Composable
 fun UsageWidgetContent(state: WidgetState) {
@@ -59,14 +57,15 @@ fun UsageWidgetContent(state: WidgetState) {
     val tap = if (state.needsLogin) {
         actionStartActivity(Intent(context, MainActivity::class.java))
     } else {
-        actionRunCallback<RefreshAction>()
+        actionStartActivity(Intent(context, TapActivity::class.java))
     }
 
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
+            .appWidgetBackground()
             .background(GlanceTheme.colors.widgetBackground)
-            .cornerRadius(20.dp)
+            .widgetCorners()
             .padding(if (compact) 8.dp else 12.dp)
             .clickable(tap),
     ) {
@@ -80,11 +79,19 @@ fun UsageWidgetContent(state: WidgetState) {
     }
 }
 
+/** System widget corner radius on Android 12+, matching other Material You widgets. */
+private fun GlanceModifier.widgetCorners(): GlanceModifier =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        cornerRadius(android.R.dimen.system_app_widget_background_radius)
+    } else {
+        cornerRadius(16.dp)
+    }
+
 @Composable
 private fun FullLayout(s: WidgetState) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Lobster(22.dp)
+            Logo(22.dp)
             Spacer(GlanceModifier.width(6.dp))
             Text(
                 "Claude usage",
@@ -131,7 +138,7 @@ private fun MeterRow(label: String, pct: Int, resets: String) {
 @Composable
 private fun CompactLayout(s: WidgetState) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        Lobster(16.dp)
+        Logo(16.dp)
         Spacer(GlanceModifier.height(6.dp))
         CompactMeter("5H", s.fiveHourPct)
         Spacer(GlanceModifier.height(6.dp))
@@ -163,15 +170,15 @@ private fun Bar(pct: Int) {
     LinearProgressIndicator(
         progress = (pct.coerceIn(0, 100)) / 100f,
         modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
-        color = accent,
-        backgroundColor = barTrack(),
+        color = GlanceTheme.colors.primary,
+        backgroundColor = GlanceTheme.colors.secondaryContainer,
     )
 }
 
 @Composable
-private fun Lobster(s: androidx.compose.ui.unit.Dp) {
+private fun Logo(s: androidx.compose.ui.unit.Dp) {
     Image(
-        provider = ImageProvider(R.drawable.ic_lobster),
+        provider = ImageProvider(R.drawable.ic_star),
         contentDescription = "Claude",
         modifier = GlanceModifier.size(s),
     )
@@ -184,7 +191,7 @@ private fun SignInPrompt(compact: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Lobster(if (compact) 18.dp else 24.dp)
+        Logo(if (compact) 18.dp else 24.dp)
         Spacer(GlanceModifier.height(6.dp))
         Text(
             if (compact) "Sign in" else "Tap to sign in",

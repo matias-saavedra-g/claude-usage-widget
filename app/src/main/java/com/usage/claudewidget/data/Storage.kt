@@ -63,6 +63,11 @@ class Storage private constructor(
         get() = AuthState.entries.getOrElse(snapshot.getInt("auth_state", 0)) { AuthState.OK }
         set(v) = snapshot.edit().putInt("auth_state", v.ordinal).apply()
 
+    /** 5-hour reset time we already sent a "limit reset" notification for. */
+    var notifiedReset: Long
+        get() = snapshot.getLong("notified_reset", 0L)
+        set(v) = snapshot.edit().putLong("notified_reset", v).apply()
+
     val hasSnapshot: Boolean get() = fiveHourUtil >= 0f
 
     fun saveSnapshot(s: UsageSnapshot) {

@@ -1,6 +1,7 @@
 package com.usage.claudewidget.data
 
 import android.content.Context
+import com.usage.claudewidget.notify.ResetNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -45,7 +46,12 @@ class UsageRepository(private val context: Context) {
         }.also { result ->
             storage.authState =
                 if (result is FetchResult.NeedsLogin) AuthState.NEEDS_LOGIN else AuthState.OK
-            if (result is FetchResult.Success) storage.saveSnapshot(result.snapshot)
+            if (result is FetchResult.Success) {
+                // Catch a reset whose alarm was lost (e.g. reboot) before overwriting it.
+                ResetNotifier.notifyIfDue(context)
+                storage.saveSnapshot(result.snapshot)
+                ResetNotifier.schedule(context, result.snapshot)
+            }
         }
     }
 
