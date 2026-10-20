@@ -13,6 +13,7 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 - Tap the widget once to refresh, or three times quickly to open the Claude app.
 - A notification tells you when the 5-hour window resets.
 - Material 3 design that follows the system theme: light or dark, and wallpaper colors (Material You) on Android 12 or newer, in both the app and the widget.
+- Usage tracker in the app: charts of the current 5-hour and weekly windows, every 5-hour session of the last 7 days, and peak usage per week. A forecast says whether you run out before the reset at your current pace, or that you are OK.
 - A four-point orange star replaces the lobster icon (source: `docs/logo.svg`).
 
 ## Requirements
@@ -43,6 +44,8 @@ The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented
 
 The widget has a compact and a full layout depending on its size, and follows the system theme, including wallpaper colors on Android 12 or newer. An amber dot means the data is out of date.
 
+Every successful fetch is also appended to a small history file (about 400 KB for 12 weeks). The app keeps 12 weeks of history and moves older rows to an archive file. The forecast computes a burn rate with up to four methods and uses their mean: usage so far over time since the window opened, the least-squares trend over the last hour (5-hour) or day (weekly), an exponentially smoothed rate between fetches, and the average rate of past windows. Methods without enough data are skipped.
+
 Anthropic does not support this. It may stop working if the endpoint or Cloudflare setup changes.
 
 ## Security
@@ -59,9 +62,10 @@ Requires JDK 17 and the Android SDK with platform 36.
 
 | Path | Contents |
 | --- | --- |
-| `data/` | Endpoints, encrypted storage, cookie handling, Cloudflare retry, fetch logic |
+| `data/` | Usage history and forecasts, endpoints, encrypted storage, cookie handling, Cloudflare retry, fetch logic |
 | `auth/LoginActivity.kt` | WebView login |
-| `ui/MainActivity.kt` | Setup screen and session key entry |
+| `ui/MainActivity.kt` | Main screen: usage, refresh, session key entry |
+| `ui/UsageInsights.kt`, `ui/UsageCharts.kt` | Forecast cards and charts |
 | `widget/` | Widget layouts |
 | `work/` | Background refresh |
 | `notify/` | 5-hour reset alarm and notification |

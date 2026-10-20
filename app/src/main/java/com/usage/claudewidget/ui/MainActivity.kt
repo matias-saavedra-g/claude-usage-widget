@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -56,10 +57,13 @@ import com.usage.claudewidget.auth.LoginActivity
 import com.usage.claudewidget.data.AuthState
 import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Storage
+import com.usage.claudewidget.data.UsageHistory
 import com.usage.claudewidget.data.UsageRepository
 import com.usage.claudewidget.widget.TimeFmt
 import com.usage.claudewidget.widget.UsageWidget
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -84,6 +88,11 @@ private data class UiStatus(
     val fiveHourResets: String,
     val sevenDayPct: Int,
     val sevenDayResets: String,
+    val fiveHourUtil: Float,
+    val fiveHourResetMs: Long,
+    val sevenDayUtil: Float,
+    val sevenDayResetMs: Long,
+    val fetchedAt: Long,
 )
 
 private fun readStatus(s: Storage): UiStatus = UiStatus(
@@ -94,6 +103,11 @@ private fun readStatus(s: Storage): UiStatus = UiStatus(
     fiveHourResets = TimeFmt.resetsIn(s.fiveHourReset),
     sevenDayPct = s.sevenDayUtil.coerceAtLeast(0f).roundToInt(),
     sevenDayResets = TimeFmt.resetsIn(s.sevenDayReset),
+    fiveHourUtil = s.fiveHourUtil.coerceAtLeast(0f),
+    fiveHourResetMs = s.fiveHourReset,
+    sevenDayUtil = s.sevenDayUtil.coerceAtLeast(0f),
+    sevenDayResetMs = s.sevenDayReset,
+    fetchedAt = s.fetchedAt,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,6 +119,18 @@ private fun SetupScreen() {
 
     var status by remember { mutableStateOf(readStatus(storage)) }
     var message by remember { mutableStateOf("") }
+
+    // Re-read the history whenever a fetch lands, including ones the background job made.
+    val insights by produceState<Insights?>(null, status) {
+        if (!status.hasData) { value = null; return@produceState }
+        value = withContext(Dispatchers.IO) {
+            computeInsights(
+                UsageHistory.get(context).load(),
+                status.fiveHourUtil, status.fiveHourResetMs,
+                status.sevenDayUtil, status.sevenDayResetMs,
+            )
+        }
+    }
 
     val loginLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -154,6 +180,8 @@ private fun SetupScreen() {
                     status = readStatus(storage)
                 }
             }
+
+            insights?.let { InsightsSection(it) }
 
             Section(
                 title = "Session key",
