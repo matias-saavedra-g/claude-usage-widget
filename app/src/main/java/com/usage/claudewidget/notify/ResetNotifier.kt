@@ -65,7 +65,7 @@ object ResetNotifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_lobster)
+            .setSmallIcon(R.drawable.ic_star)
             .setContentTitle(context.getString(R.string.reset_title))
             .setContentText(context.getString(R.string.reset_text))
             .setContentIntent(open)

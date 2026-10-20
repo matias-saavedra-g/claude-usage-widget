@@ -12,6 +12,7 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 - GitHub Actions builds the APK on every push.
 - Tap the widget once to refresh, or three times quickly to open the Claude app.
 - A notification tells you when the 5-hour window resets.
+- A four-point orange star replaces the lobster icon (source: `docs/logo.svg`).
 
 ## Requirements
 
@@ -23,6 +24,7 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 1. Open the [Actions](https://github.com/matias-saavedra-g/claude-usage-widget/actions) tab, select the latest successful **Build APK** run, and download the `claude-usage-widget` artifact. You must be signed in to GitHub.
 2. Unzip it and install `app-debug.apk` on your phone. Allow installs from unknown sources when asked.
 3. If you have the original app installed, uninstall it first. The two are signed with different keys.
+4. Builds from version 1.1 on are signed with the fixed key in `app/debug.keystore`, so later builds install as updates. A build older than 1.1 was signed with a random key, so uninstall it once before installing 1.1.
 
 ## Setup
 

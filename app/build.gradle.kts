@@ -25,11 +25,19 @@ android {
         applicationId = "com.usage.claudewidget"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "1.1"
     }
 
     signingConfigs {
+        // Fixed debug key, so every CI build can install over the previous one. Each CI runner
+        // would otherwise generate its own random debug key, and Android rejects the update.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))

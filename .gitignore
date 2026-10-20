@@ -13,3 +13,5 @@ app/build/
 /.signing/
 *.keystore
 *.jks
+# Public debug key shared by CI builds; not a secret.
+!/app/debug.keystore
