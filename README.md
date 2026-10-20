@@ -12,6 +12,7 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 - GitHub Actions builds the APK on every push.
 - Tap the widget once to refresh, or three times quickly to open the Claude app.
 - A notification tells you when the 5-hour window resets.
+- Material 3 design that follows the system theme: light or dark, and wallpaper colors (Material You) on Android 12 or newer, in both the app and the widget.
 - A four-point orange star replaces the lobster icon (source: `docs/logo.svg`).
 
 ## Requirements
@@ -40,7 +41,7 @@ The session key expires after a few weeks, or when you sign out of claude.ai in 
 
 The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented endpoint the claude.ai usage page uses, with your `sessionKey` cookie. It finds your organization ID on its own. When Cloudflare blocks a request, the app loads claude.ai in a hidden WebView to get a new `cf_clearance` cookie and retries. A background job refreshes every 15 minutes. After each fetch the app sets an alarm for the 5-hour reset time and posts a notification when it fires. If the alarm was lost, for example after a reboot, the next refresh sends the notification instead.
 
-The widget has a compact and a full layout depending on its size, and follows the system light or dark theme. An amber dot means the data is out of date.
+The widget has a compact and a full layout depending on its size, and follows the system theme, including wallpaper colors on Android 12 or newer. An amber dot means the data is out of date.
 
 Anthropic does not support this. It may stop working if the endpoint or Cloudflare setup changes.
 
