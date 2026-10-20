@@ -25,18 +25,22 @@ android {
         applicationId = "com.usage.claudewidget"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.2"
+        versionCode = 6
+        versionName = "1.3"
     }
 
     signingConfigs {
         // Fixed debug key, so every CI build can install over the previous one. Each CI runner
         // would otherwise generate its own random debug key, and Android rejects the update.
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        // CI writes it from the DEBUG_KEYSTORE_BASE64 secret; without it, the default key is used.
+        val sharedDebugKeystore = file("debug.keystore")
+        if (sharedDebugKeystore.exists()) {
+            getByName("debug") {
+                storeFile = sharedDebugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
         if (hasReleaseSigning) {
             create("release") {

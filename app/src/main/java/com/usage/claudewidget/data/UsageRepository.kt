@@ -50,6 +50,8 @@ class UsageRepository(private val context: Context) {
                 // Catch a reset whose alarm was lost (e.g. reboot) before overwriting it.
                 ResetNotifier.notifyIfDue(context)
                 storage.saveSnapshot(result.snapshot)
+                // History only feeds the charts; a failed write must not fail the refresh.
+                runCatching { UsageHistory.get(context).append(result.snapshot) }
                 ResetNotifier.schedule(context, result.snapshot)
             }
         }

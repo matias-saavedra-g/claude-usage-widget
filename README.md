@@ -1,18 +1,25 @@
-# Claude Usage Widget
+<p align="center"><img src="docs/logo.svg" alt="Four-point orange star" width="96" /></p>
+
+<h1 align="center">Claude Usage Widget</h1>
 
 Android home-screen widget showing your Claude Pro/Max usage: the 5-hour and 1-week percentages and when each resets.
 
 Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked from [utaysi/claude-usage-widget](https://github.com/utaysi/claude-usage-widget) by [utaysi](https://github.com/utaysi).
 
-<img src="docs/promo.png" alt="Widget on an Android home screen" width="720" />
+<p align="center">
+  <img src="docs/screenshot-usage.jpg" alt="Current usage and 5-hour window forecast" width="270" />
+  <img src="docs/screenshot-weekly.jpg" alt="Weekly window and 5-hour sessions of the last 7 days" width="270" />
+  <img src="docs/screenshot-settings.jpg" alt="Weekly trend, session key and background refresh settings" width="270" />
+</p>
 
 ## Changes in this fork
 
 - Sign in by pasting your `sessionKey` cookie instead of using the in-app WebView login, which can fail on some phones.
-- GitHub Actions builds the APK on every push.
+- GitHub Actions builds the APK on every push and publishes each new version on `master` to [Releases](https://github.com/matias-saavedra-g/claude-usage-widget/releases).
 - Tap the widget once to refresh, or three times quickly to open the Claude app.
 - A notification tells you when the 5-hour window resets.
 - Material 3 design that follows the system theme: light or dark, and wallpaper colors (Material You) on Android 12 or newer, in both the app and the widget.
+- Usage tracker in the app: charts of the current 5-hour and weekly windows, every 5-hour session of the last 7 days, and peak usage per week. A forecast says whether you run out before the reset at your current pace, or that you are OK.
 - A four-point orange star replaces the lobster icon (source: `docs/logo.svg`).
 
 ## Requirements
@@ -22,8 +29,8 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 
 ## Install
 
-1. Open the [Actions](https://github.com/matias-saavedra-g/claude-usage-widget/actions) tab, select the latest successful **Build APK** run, and download the `claude-usage-widget` artifact. You must be signed in to GitHub.
-2. Unzip it and install `app-debug.apk` on your phone. Allow installs from unknown sources when asked.
+1. Download `claude-usage-widget-vX.Y.apk` from the [latest release](https://github.com/matias-saavedra-g/claude-usage-widget/releases/latest). Builds from other branches are in the [Actions](https://github.com/matias-saavedra-g/claude-usage-widget/actions) tab as the `claude-usage-widget` artifact (sign-in required).
+2. Install the APK on your phone. Allow installs from unknown sources when asked.
 3. If you have the original app installed, uninstall it first. The two are signed with different keys.
 4. Builds from version 1.1 on are signed with the fixed key in `app/debug.keystore`, so later builds install as updates. A build older than 1.1 was signed with a random key, so uninstall it once before installing 1.1.
 
@@ -43,11 +50,17 @@ The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented
 
 The widget has a compact and a full layout depending on its size, and follows the system theme, including wallpaper colors on Android 12 or newer. An amber dot means the data is out of date.
 
+Every successful fetch is also appended to a small history file (about 400 KB for 12 weeks). The app keeps 12 weeks of history and moves older rows to an archive file. The forecast computes a burn rate with up to four methods and uses their mean: usage so far over time since the window opened, the least-squares trend over the last hour (5-hour) or day (weekly), an exponentially smoothed rate between fetches, and the average rate of past windows. Methods without enough data are skipped.
+
 Anthropic does not support this. It may stop working if the endpoint or Cloudflare setup changes.
 
 ## Security
 
 The session key gives full access to your Claude account. The app stores it with `EncryptedSharedPreferences` and excludes it from backups. Never put it in the source code or share it.
+
+## Releases
+
+On every push to `master`, the **Build APK** workflow reads `versionName` from `app/build.gradle.kts`. If no tag `v<versionName>` exists yet, it creates that tag and a GitHub release with the APK attached. To publish a new version, raise `versionCode` and `versionName` and push to `master`. Pushes that keep the same version only update the Actions artifact.
 
 ## Build locally
 
@@ -59,9 +72,10 @@ Requires JDK 17 and the Android SDK with platform 36.
 
 | Path | Contents |
 | --- | --- |
-| `data/` | Endpoints, encrypted storage, cookie handling, Cloudflare retry, fetch logic |
+| `data/` | Usage history and forecasts, endpoints, encrypted storage, cookie handling, Cloudflare retry, fetch logic |
 | `auth/LoginActivity.kt` | WebView login |
-| `ui/MainActivity.kt` | Setup screen and session key entry |
+| `ui/MainActivity.kt` | Main screen: usage, refresh, session key entry |
+| `ui/UsageInsights.kt`, `ui/UsageCharts.kt` | Forecast cards and charts |
 | `widget/` | Widget layouts |
 | `work/` | Background refresh |
 | `notify/` | 5-hour reset alarm and notification |
