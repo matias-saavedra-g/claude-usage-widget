@@ -1,15 +1,21 @@
-# Claude Usage Widget
+<p align="center"><img src="docs/logo.svg" alt="Four-point orange star" width="96" /></p>
+
+<h1 align="center">Claude Usage Widget</h1>
 
 Android home-screen widget showing your Claude Pro/Max usage: the 5-hour and 1-week percentages and when each resets.
 
 Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked from [utaysi/claude-usage-widget](https://github.com/utaysi/claude-usage-widget) by [utaysi](https://github.com/utaysi).
 
-<img src="docs/promo.png" alt="Widget on an Android home screen" width="720" />
+<p align="center">
+  <img src="docs/screenshot-usage.jpg" alt="Current usage and 5-hour window forecast" width="270" />
+  <img src="docs/screenshot-weekly.jpg" alt="Weekly window and 5-hour sessions of the last 7 days" width="270" />
+  <img src="docs/screenshot-settings.jpg" alt="Weekly trend, session key and background refresh settings" width="270" />
+</p>
 
 ## Changes in this fork
 
 - Sign in by pasting your `sessionKey` cookie instead of using the in-app WebView login, which can fail on some phones.
-- GitHub Actions builds the APK on every push.
+- GitHub Actions builds the APK on every push and publishes each new version on `master` to [Releases](https://github.com/matias-saavedra-g/claude-usage-widget/releases).
 - Tap the widget once to refresh, or three times quickly to open the Claude app.
 - A notification tells you when the 5-hour window resets.
 - Material 3 design that follows the system theme: light or dark, and wallpaper colors (Material You) on Android 12 or newer, in both the app and the widget.
@@ -23,8 +29,8 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 
 ## Install
 
-1. Open the [Actions](https://github.com/matias-saavedra-g/claude-usage-widget/actions) tab, select the latest successful **Build APK** run, and download the `claude-usage-widget` artifact. You must be signed in to GitHub.
-2. Unzip it and install `app-debug.apk` on your phone. Allow installs from unknown sources when asked.
+1. Download `claude-usage-widget-vX.Y.apk` from the [latest release](https://github.com/matias-saavedra-g/claude-usage-widget/releases/latest). Builds from other branches are in the [Actions](https://github.com/matias-saavedra-g/claude-usage-widget/actions) tab as the `claude-usage-widget` artifact (sign-in required).
+2. Install the APK on your phone. Allow installs from unknown sources when asked.
 3. If you have the original app installed, uninstall it first. The two are signed with different keys.
 4. Builds from version 1.1 on are signed with the fixed key in `app/debug.keystore`, so later builds install as updates. A build older than 1.1 was signed with a random key, so uninstall it once before installing 1.1.
 
@@ -51,6 +57,10 @@ Anthropic does not support this. It may stop working if the endpoint or Cloudfla
 ## Security
 
 The session key gives full access to your Claude account. The app stores it with `EncryptedSharedPreferences` and excludes it from backups. Never put it in the source code or share it.
+
+## Releases
+
+On every push to `master`, the **Build APK** workflow reads `versionName` from `app/build.gradle.kts`. If no tag `v<versionName>` exists yet, it creates that tag and a GitHub release with the APK attached. To publish a new version, raise `versionCode` and `versionName` and push to `master`. Pushes that keep the same version only update the Actions artifact.
 
 ## Build locally
 

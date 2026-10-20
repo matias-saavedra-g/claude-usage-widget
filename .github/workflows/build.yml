@@ -2,6 +2,8 @@ name: Build APK
 on:
   push:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -19,3 +21,18 @@ jobs:
         with:
           name: claude-usage-widget
           path: app/build/outputs/apk/debug/*.apk
+      # Publish a release when versionName in app/build.gradle.kts has no tag yet.
+      - name: Publish release
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts)
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, skipping."
+            exit 0
+          fi
+          ASSET="claude-usage-widget-${TAG}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$ASSET"
+          gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
