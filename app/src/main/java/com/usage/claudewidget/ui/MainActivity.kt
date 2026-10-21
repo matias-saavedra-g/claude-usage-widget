@@ -15,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,6 +38,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -50,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -215,6 +219,7 @@ private fun SetupScreen() {
                         Text(if (storage.isLoggedIn) "Re-sign in (WebView)" else "Sign in (WebView)")
                     }
                 }
+                OrganizationRow(status.orgId, status.signedIn)
             }
 
             Section(
@@ -260,7 +265,7 @@ private fun StatusCard(status: UiStatus, message: String, onRefresh: () -> Unit)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    message.ifBlank { "Org: ${status.orgId ?: "-"}" },
+                    message,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f),
                 )
@@ -269,6 +274,54 @@ private fun StatusCard(status: UiStatus, message: String, onRefresh: () -> Unit)
         }
     }
 }
+
+/** The org ID stays masked until the user taps it and confirms; tapping again hides it. */
+@Composable
+private fun OrganizationRow(orgId: String?, connected: Boolean) {
+    var revealed by remember(orgId) { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Organization ID", style = MaterialTheme.typography.labelLarge)
+            Text(
+                when {
+                    orgId == null -> "-"
+                    revealed -> orgId
+                    else -> maskOrgId(orgId)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.clickable(enabled = orgId != null) {
+                    if (revealed) revealed = false else confirming = true
+                },
+            )
+        }
+        if (connected && orgId != null) {
+            Text(
+                "✓",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+
+    if (confirming && orgId != null) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Show organization ID?") },
+            text = { Text("The organization ID identifies your Claude account. Make sure no one else can see your screen.") },
+            confirmButton = {
+                TextButton(onClick = { revealed = true; confirming = false }) { Text("Show") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+private fun maskOrgId(id: String): String = "*".repeat(id.length)
 
 @Composable
 private fun UsageMeter(label: String, pct: Int, resets: String) {
