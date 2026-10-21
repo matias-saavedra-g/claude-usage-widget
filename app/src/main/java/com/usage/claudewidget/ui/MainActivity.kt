@@ -321,8 +321,7 @@ private fun OrganizationRow(orgId: String?, connected: Boolean) {
     }
 }
 
-private fun maskOrgId(id: String): String =
-    if (id.length <= 4) "*".repeat(id.length) else "*".repeat(id.length - 4) + id.takeLast(4)
+private fun maskOrgId(id: String): String = "*".repeat(id.length)
 
 @Composable
 private fun UsageMeter(label: String, pct: Int, resets: String) {
