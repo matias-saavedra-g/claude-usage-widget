@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.usage.claudewidget.data.Const
+import com.usage.claudewidget.data.Storage
 import java.util.concurrent.TimeUnit
 
 object RefreshScheduler {
@@ -17,17 +18,22 @@ object RefreshScheduler {
     private val networkConstraint =
         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-    /** Periodic 15-minute refresh; survives reboot. Idempotent (KEEP). */
-    fun ensurePeriodic(context: Context) {
-        val work = PeriodicWorkRequestBuilder<RefreshWorker>(
-            Const.REFRESH_INTERVAL_MIN, TimeUnit.MINUTES
-        )
+    /**
+     * Periodic refresh at the user's interval; survives reboot. Idempotent (KEEP) unless
+     * [reschedule] is set, which applies a changed interval to the existing work.
+     */
+    fun ensurePeriodic(context: Context, reschedule: Boolean = false) {
+        val minutes = Storage.get(context).refreshIntervalMin.toLong()
+            .coerceAtLeast(Const.REFRESH_INTERVAL_MIN)
+        val work = PeriodicWorkRequestBuilder<RefreshWorker>(minutes, TimeUnit.MINUTES)
             .setConstraints(networkConstraint)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            Const.WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, work
+            Const.WORK_NAME,
+            if (reschedule) ExistingPeriodicWorkPolicy.UPDATE else ExistingPeriodicWorkPolicy.KEEP,
+            work,
         )
     }
 

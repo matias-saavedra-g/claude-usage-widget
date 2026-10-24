@@ -26,6 +26,7 @@ import java.util.Locale
 /** Everything the charts and forecasts need, computed off the main thread from the history file. */
 data class Insights(
     val now: Long,
+    /** The chart window, the last 12 weeks. */
     val samples: List<Sample>,
     val fiveHour: Prediction,
     val weekly: Prediction,
@@ -33,6 +34,8 @@ data class Insights(
 
 fun computeInsights(
     samples: List<Sample>,
+    /** All history kept for forecasting, which can reach further back than [samples]. */
+    forecastSamples: List<Sample>,
     fiveHourUtil: Float,
     fiveHourReset: Long,
     weeklyUtil: Float,
@@ -41,8 +44,8 @@ fun computeInsights(
 ) = Insights(
     now = now,
     samples = samples,
-    fiveHour = UsagePredictor.predict(samples, WindowKind.FIVE_HOUR, fiveHourUtil, fiveHourReset, now),
-    weekly = UsagePredictor.predict(samples, WindowKind.WEEKLY, weeklyUtil, weeklyReset, now),
+    fiveHour = UsagePredictor.predict(forecastSamples, WindowKind.FIVE_HOUR, fiveHourUtil, fiveHourReset, now),
+    weekly = UsagePredictor.predict(forecastSamples, WindowKind.WEEKLY, weeklyUtil, weeklyReset, now),
 )
 
 private val clock = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
@@ -73,10 +76,7 @@ private fun ForecastCard(p: Prediction, insights: Insights) {
         val run = UsagePredictor.windows(insights.samples, p.kind).lastOrNull()
             ?.takeIf { kotlin.math.abs(it.resetMs - p.resetMs) <= 30 * 60_000L }
         val points = run?.samples.orEmpty().map { ChartPoint(it.t, p.kind.util(it)) } + ChartPoint(now, p.util)
-        val projEnd = p.limitAtMs ?: p.resetMs
-        val projection = if (p.pctPerHour > 0) {
-            listOf(ChartPoint(now, p.util), ChartPoint(projEnd, p.projectedAtReset.toFloat().let { if (p.willHitLimit) 100f else it }))
-        } else emptyList()
+        val projection = p.curve.map { (t, u) -> ChartPoint(t, u.toFloat()) }
         val f = if (p.kind == WindowKind.FIVE_HOUR) clock else dayClock
         UsageLineChart(
             series = listOf(points),
@@ -91,7 +91,14 @@ private fun ForecastCard(p: Prediction, insights: Insights) {
         if (p.methods.isNotEmpty()) {
             HorizontalDivider()
             p.methods.forEach { MethodRow(it.name, it.pctPerHour, p.kind) }
-            MethodRow("Mean (used for forecast)", p.pctPerHour, p.kind, emphasize = true)
+            MethodRow("Current pace (mean)", p.pctPerHour, p.kind, emphasize = true)
+            if (p.models.isNotEmpty()) {
+                Text(
+                    "Forecast curve: average of " + p.models.joinToString(" and ") { it.lowercase() } + ".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

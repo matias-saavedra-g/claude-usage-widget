@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.webkit.WebSettings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +34,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -44,6 +47,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -62,7 +66,11 @@ import com.usage.claudewidget.data.AuthState
 import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Storage
 import com.usage.claudewidget.data.UsageHistory
+import com.usage.claudewidget.data.UsagePredictor
 import com.usage.claudewidget.data.UsageRepository
+import java.time.LocalDate
+import com.usage.claudewidget.data.Retention
+import com.usage.claudewidget.work.RefreshScheduler
 import com.usage.claudewidget.widget.TimeFmt
 import com.usage.claudewidget.widget.UsageWidget
 import kotlinx.coroutines.Dispatchers
@@ -128,8 +136,10 @@ private fun SetupScreen() {
     val insights by produceState<Insights?>(null, status) {
         if (!status.hasData) { value = null; return@produceState }
         value = withContext(Dispatchers.IO) {
+            val history = UsageHistory.get(context)
             computeInsights(
-                UsageHistory.get(context).load(),
+                history.load(),
+                history.loadSince(UsagePredictor.FORECAST_HISTORY_MS),
                 status.fiveHourUtil, status.fiveHourResetMs,
                 status.sevenDayUtil, status.sevenDayResetMs,
             )
@@ -222,11 +232,21 @@ private fun SetupScreen() {
                 OrganizationRow(status.orgId, status.signedIn)
             }
 
+            RetentionSection(storage)
+
             Section(
                 title = "Background refresh",
-                body = "The widget refreshes every 15 minutes and notifies you when the 5-hour " +
-                    "window resets. Tap it once to refresh, three times to open Claude.",
+                body = "The widget refreshes in the background and notifies you when the 5-hour " +
+                    "window resets. Tap it once to refresh, three times to open Claude. Longer " +
+                    "intervals save battery and requests; Android may delay any of them a little.",
             ) {
+                var interval by remember { mutableStateOf(storage.refreshIntervalMin) }
+                Text("Refresh every", style = MaterialTheme.typography.labelLarge)
+                ChipRow(INTERVAL_OPTIONS, interval) {
+                    interval = it
+                    storage.refreshIntervalMin = it
+                    RefreshScheduler.ensurePeriodic(context, reschedule = true)
+                }
                 FilledTonalButton(
                     onClick = { requestBatteryExemption(context) },
                     modifier = Modifier.fillMaxWidth(),
@@ -238,8 +258,126 @@ private fun SetupScreen() {
                     ) { Text("Allow on-time reset notification") }
                 }
             }
+
+            ExportButton()
         }
     }
+}
+
+private val INTERVAL_OPTIONS = listOf(15 to "15 min", 30 to "30 min", 60 to "1 hour", 120 to "2 hours")
+private val AGE_OPTIONS = listOf(7 to "1 week", 28 to "4 weeks", 84 to "12 weeks", 365 to "1 year", 0 to "Forever")
+private val SIZE_OPTIONS = listOf(256 to "256 KB", 1024 to "1 MB", 5120 to "5 MB", 0 to "No limit")
+
+/** Lets the user cap the stored history by age and by size; whichever is hit first applies. */
+@Composable
+private fun RetentionSection(storage: Storage) {
+    val context = LocalContext.current
+    val history = remember { UsageHistory.get(context) }
+    var maxDays by remember { mutableStateOf(storage.historyMaxDays) }
+    var maxKb by remember { mutableStateOf(storage.historyMaxKb) }
+    var size by remember { mutableLongStateOf(0L) }
+    // A tighter limit that would delete rows waits here until the user confirms it.
+    var pending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun choose(days: Int, kb: Int) {
+        val r = Retention(days * 86_400_000L, kb * 1024L)
+        scope.launch {
+            if (withContext(Dispatchers.IO) { history.wouldDrop(r) }) {
+                pending = days to kb
+            } else {
+                maxDays = days; maxKb = kb
+                storage.historyMaxDays = days; storage.historyMaxKb = kb
+            }
+        }
+    }
+
+    LaunchedEffect(maxDays, maxKb) {
+        size = withContext(Dispatchers.IO) {
+            history.enforce(storage.retention)
+            history.sizeBytes()
+        }
+    }
+
+    Section(
+        title = "Data retention",
+        body = "Choose how much usage history to keep. Older rows are deleted once either " +
+            "limit is reached. Charts use the last 12 weeks. Using ${formatSize(size)}.",
+    ) {
+        Text("Keep data for", style = MaterialTheme.typography.labelLarge)
+        ChipRow(AGE_OPTIONS, maxDays) { choose(it, maxKb) }
+        Text("Maximum size", style = MaterialTheme.typography.labelLarge)
+        ChipRow(SIZE_OPTIONS, maxKb) { choose(maxDays, it) }
+    }
+
+    pending?.let { (days, kb) ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("Delete old data?") },
+            text = {
+                Text("This limit is smaller than the history you have now. The rows past it " +
+                    "will be deleted permanently. Export a CSV first if you want to keep them.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    maxDays = days; maxKb = kb
+                    storage.historyMaxDays = days; storage.historyMaxKb = kb
+                    pending = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending = null }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ChipRow(options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for ((value, label) in options) {
+            FilterChip(
+                selected = value == selected,
+                onClick = { onSelect(value) },
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+private fun formatSize(bytes: Long): String = when {
+    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024))
+    else -> "${(bytes + 1023) / 1024} KB"
+}
+
+/** Saves the whole history as a CSV file wherever the user picks, for use in other apps. */
+@Composable
+private fun ExportButton() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use {
+                        UsageHistory.get(context).exportCsv(it)
+                    }
+                }.isSuccess
+            }
+            val text = if (ok) "Usage history exported." else "Export failed."
+            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        }
+    }
+    OutlinedButton(
+        onClick = { launcher.launch("claude-usage-${LocalDate.now()}.csv") },
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text("Export data as CSV") }
 }
 
 @Composable

@@ -68,6 +68,24 @@ class Storage private constructor(
         get() = snapshot.getLong("notified_reset", 0L)
         set(v) = snapshot.edit().putLong("notified_reset", v).apply()
 
+    /** Minutes between background fetches; WorkManager's floor is 15. */
+    var refreshIntervalMin: Int
+        get() = snapshot.getInt("refresh_interval_min", Const.REFRESH_INTERVAL_MIN.toInt())
+        set(v) = snapshot.edit().putInt("refresh_interval_min", v).apply()
+
+    /** History retention by age, in days; 0 keeps everything. */
+    var historyMaxDays: Int
+        get() = snapshot.getInt("history_max_days", 0)
+        set(v) = snapshot.edit().putInt("history_max_days", v).apply()
+
+    /** History retention by size, in KB; 0 means no cap. */
+    var historyMaxKb: Int
+        get() = snapshot.getInt("history_max_kb", 0)
+        set(v) = snapshot.edit().putInt("history_max_kb", v).apply()
+
+    val retention: Retention
+        get() = Retention(historyMaxDays * 86_400_000L, historyMaxKb * 1024L)
+
     val hasSnapshot: Boolean get() = fiveHourUtil >= 0f
 
     fun saveSnapshot(s: UsageSnapshot) {
