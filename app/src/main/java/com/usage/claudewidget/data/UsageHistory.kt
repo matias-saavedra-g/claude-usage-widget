@@ -17,8 +17,8 @@ data class Sample(
  * Append-only CSV log of every successful fetch, used for the charts and predictions.
  *
  * A row is ~50 bytes and the background job writes about 96 rows a day, so the 12 weeks kept
- * live come to roughly 400 KB. Older rows move to an archive file that is never read back
- * by the UI, so it costs nothing at runtime. How much of the whole log is kept is up to the
+ * live come to roughly 400 KB. Older rows move to an archive file that only the forecasts
+ * (up to 26 weeks back, via [loadSince]) and the CSV export read. How much of the whole log is kept is up to the
  * user's [Retention]; both files are included in [exportCsv].
  */
 class UsageHistory private constructor(dir: File) {
@@ -37,6 +37,15 @@ class UsageHistory private constructor(dir: File) {
         )
         live.appendText(encode(row) + "\n")
         archiveOld(s.fetchedAtEpochMs)
+    }
+
+    /** Live and archived samples newer than [maxAgeMs], oldest first, for the forecasts. */
+    @Synchronized
+    fun loadSince(maxAgeMs: Long, now: Long = System.currentTimeMillis()): List<Sample> {
+        val cutoff = now - maxAgeMs
+        return listOf(archive, live).filter { it.exists() }
+            .flatMap { f -> f.readLines().mapNotNull(::decode).filter { it.t >= cutoff } }
+            .sortedBy { it.t }
     }
 
     /** Total bytes on disk, live plus archive. */

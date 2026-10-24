@@ -66,6 +66,7 @@ import com.usage.claudewidget.data.AuthState
 import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Storage
 import com.usage.claudewidget.data.UsageHistory
+import com.usage.claudewidget.data.UsagePredictor
 import com.usage.claudewidget.data.UsageRepository
 import java.time.LocalDate
 import com.usage.claudewidget.data.Retention
@@ -135,8 +136,10 @@ private fun SetupScreen() {
     val insights by produceState<Insights?>(null, status) {
         if (!status.hasData) { value = null; return@produceState }
         value = withContext(Dispatchers.IO) {
+            val history = UsageHistory.get(context)
             computeInsights(
-                UsageHistory.get(context).load(),
+                history.load(),
+                history.loadSince(UsagePredictor.FORECAST_HISTORY_MS),
                 status.fiveHourUtil, status.fiveHourResetMs,
                 status.sevenDayUtil, status.sevenDayResetMs,
             )
