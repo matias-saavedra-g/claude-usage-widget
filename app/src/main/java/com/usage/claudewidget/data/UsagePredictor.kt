@@ -1,11 +1,21 @@
 package com.usage.claudewidget.data
 
+import java.util.TimeZone
 import kotlin.math.abs
+import kotlin.math.exp
 
 /** The two limits the usage endpoint reports. */
-enum class WindowKind(val label: String, val lengthMs: Long, val trendLookbackMs: Long) {
-    FIVE_HOUR("5-hour", 5L * 3_600_000, 60L * 60_000),
-    WEEKLY("Weekly", 7L * 24 * 3_600_000, 24L * 3_600_000);
+enum class WindowKind(
+    val label: String,
+    val lengthMs: Long,
+    val trendLookbackMs: Long,
+    /** Step of the projected curve. */
+    val stepMs: Long,
+    /** How fast the current pace hands over to the usual pattern, looking ahead. */
+    val momentumMs: Long,
+) {
+    FIVE_HOUR("5-hour", 5L * 3_600_000, 60L * 60_000, 10L * 60_000, 60L * 60_000),
+    WEEKLY("Weekly", 7L * 24 * 3_600_000, 24L * 3_600_000, 3_600_000, 12L * 3_600_000);
 
     fun util(s: Sample) = if (this == FIVE_HOUR) s.fiveHour else s.sevenDay
     fun reset(s: Sample) = if (this == FIVE_HOUR) s.fiveHourReset else s.sevenDayReset
@@ -24,6 +34,10 @@ data class Prediction(
     val methods: List<MethodRate>,
     /** Mean of [methods]; 0 when none could be computed. */
     val pctPerHour: Double,
+    /** Projected usage from now until the limit or the reset; empty without a forecast. */
+    val curve: List<Pair<Long, Double>>,
+    /** True when [curve] follows the weekly usage pattern instead of a straight line. */
+    val usesPattern: Boolean,
     /** Where usage ends up at reset if the pace holds, capped at 100. */
     val projectedAtReset: Double,
     /** When usage reaches 100% at this pace, or null if it stays under the limit until reset. */
@@ -45,6 +59,12 @@ data class Prediction(
  *  - Recent trend: least-squares slope over the last hour (5-hour) or day (weekly).
  *  - Smoothed rate: exponentially weighted mean of the rate between consecutive fetches.
  *  - Past windows: average rate of earlier windows of the same kind.
+ *
+ * Usage is not linear: it comes in work sessions and stops at night. Once there is a week of
+ * history, the projection follows a usage pattern instead of a straight line: the average rise
+ * for each of the 168 hours of the week, scaled by how this window compares to that pattern so
+ * far. Near "now" the curve leans on the current pace and hands over to the pattern further out.
+ * It is one pass over the history plus at most 168 steps, run only when the app screen opens.
  */
 object UsagePredictor {
 
@@ -96,12 +116,34 @@ object UsagePredictor {
         }
         val rate = if (methods.isEmpty()) 0.0 else methods.sumOf { it.pctPerHour } / methods.size
 
-        val hoursLeft = ((resetMs - now) / MS_PER_HOUR).coerceAtLeast(0.0)
-        val projected = (util + rate * hoursLeft).coerceAtMost(100.0)
-        val limitAt = if (rate > 0 && resetMs > now) {
-            val hoursToLimit = (100 - util) / rate
-            (now + (hoursToLimit * MS_PER_HOUR).toLong()).takeIf { it < resetMs }
-        } else null
+        val profile = if (resetMs > now && methods.isNotEmpty()) hourOfWeekProfile(samples, kind) else null
+        val scale = profile?.let { patternScale(it, inWindow, kind, util, windowStart, now) } ?: 1.0
+        val curve = mutableListOf<Pair<Long, Double>>()
+        var limitAt: Long? = null
+        if (resetMs > now && (rate > 0 || profile != null)) {
+            var t = now
+            var u = util.toDouble()
+            curve += t to u
+            while (t < resetMs && u < 100) {
+                val next = minOf(t + kind.stepMs, resetMs)
+                val r = if (profile == null) rate else {
+                    // Current pace dominates the near term, the usual pattern the far term.
+                    val w = exp(-(t - now).toDouble() / kind.momentumMs)
+                    w * rate + (1 - w) * profile[hourOfWeek(t)] * scale
+                }
+                val du = r * (next - t) / MS_PER_HOUR
+                if (u + du >= 100) {
+                    limitAt = t + ((100 - u) / r * MS_PER_HOUR).toLong()
+                    u = 100.0
+                    t = limitAt
+                } else {
+                    u += du
+                    t = next
+                }
+                curve += t to u
+            }
+        }
+        val projected = curve.lastOrNull()?.second ?: util.toDouble()
 
         val spikes = all.takeLast(40).flatMap { run ->
             run.samples.zipWithNext { a, b -> (kind.util(b) - kind.util(a)).toDouble() }
@@ -112,10 +154,57 @@ object UsagePredictor {
             resetMs = resetMs,
             methods = methods,
             pctPerHour = rate,
+            curve = curve,
+            usesPattern = profile != null,
             projectedAtReset = projected,
             limitAtMs = if (util >= 100f) now else limitAt,
             avgSpikePct = spikes.takeIf { it.isNotEmpty() }?.average(),
         )
+    }
+
+    /**
+     * Average rise in percent per hour for each hour of the week (local time), from every
+     * fetch-to-fetch increase in the history. Null with less than a week of history.
+     */
+    private fun hourOfWeekProfile(samples: List<Sample>, kind: WindowKind): DoubleArray? {
+        val first = samples.firstOrNull() ?: return null
+        val spanWeeks = (samples.last().t - first.t).toDouble() / WindowKind.WEEKLY.lengthMs
+        if (spanWeeks < 1.0) return null
+        val rise = DoubleArray(168)
+        for ((a, b) in samples.zipWithNext()) {
+            // A gap or a reset in between says nothing about when the usage happened.
+            if (b.t - a.t > 2 * 3_600_000 || abs(kind.reset(b) - kind.reset(a)) > SAME_RESET_MS) continue
+            val d = kind.util(b) - kind.util(a)
+            if (d > 0) rise[hourOfWeek(b.t)] += d.toDouble()
+        }
+        for (h in rise.indices) rise[h] /= spanWeeks
+        return rise
+    }
+
+    /**
+     * How busy this window is compared to the pattern: the rise so far over what the pattern
+     * expects for the same hours. Clamped so one odd window can't blow the forecast up.
+     */
+    private fun patternScale(
+        profile: DoubleArray, inWindow: List<Sample>, kind: WindowKind,
+        util: Float, windowStart: Long, now: Long,
+    ): Double {
+        var expected = 0.0
+        var t = windowStart
+        while (t < now) {
+            val next = minOf(t + 3_600_000, now)
+            expected += profile[hourOfWeek(t)] * (next - t) / MS_PER_HOUR
+            t = next
+        }
+        if (expected < 1.0 || inWindow.isEmpty()) return 1.0
+        return (util / expected).coerceIn(0.25, 4.0)
+    }
+
+    private fun hourOfWeek(t: Long): Int {
+        val local = t + TimeZone.getDefault().getOffset(t)
+        // Epoch day 0 was a Thursday; shift so bin 0 is Monday 00:00.
+        val hours = Math.floorDiv(local, 3_600_000L) + 3 * 24
+        return Math.floorMod(hours, 168L).toInt()
     }
 
     private fun recentTrend(s: List<Sample>, kind: WindowKind, now: Long): Double? {

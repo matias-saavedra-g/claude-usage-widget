@@ -43,6 +43,17 @@ class UsageHistory private constructor(dir: File) {
     @Synchronized
     fun sizeBytes(): Long = archive.length() + live.length()
 
+    /** True when [enforce] with [r] would delete at least one row. */
+    @Synchronized
+    fun wouldDrop(r: Retention, now: Long = System.currentTimeMillis()): Boolean {
+        if (r.maxBytes > 0 && sizeBytes() > r.maxBytes) return true
+        if (r.maxAgeMs <= 0) return false
+        val oldest = listOf(archive, live).firstNotNullOfOrNull { f ->
+            if (f.exists()) f.bufferedReader().use { it.readLine() }?.let(::decode) else null
+        }
+        return oldest != null && oldest.t < now - r.maxAgeMs
+    }
+
     /**
      * Drops rows older than [Retention.maxAgeMs], then the oldest rows until both files fit in
      * [Retention.maxBytes]. Reads nothing when no limit is set or both are already met.

@@ -68,6 +68,11 @@ class Storage private constructor(
         get() = snapshot.getLong("notified_reset", 0L)
         set(v) = snapshot.edit().putLong("notified_reset", v).apply()
 
+    /** Minutes between background fetches; WorkManager's floor is 15. */
+    var refreshIntervalMin: Int
+        get() = snapshot.getInt("refresh_interval_min", Const.REFRESH_INTERVAL_MIN.toInt())
+        set(v) = snapshot.edit().putInt("refresh_interval_min", v).apply()
+
     /** History retention by age, in days; 0 keeps everything. */
     var historyMaxDays: Int
         get() = snapshot.getInt("history_max_days", 0)

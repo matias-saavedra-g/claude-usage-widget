@@ -68,6 +68,8 @@ import com.usage.claudewidget.data.Storage
 import com.usage.claudewidget.data.UsageHistory
 import com.usage.claudewidget.data.UsageRepository
 import java.time.LocalDate
+import com.usage.claudewidget.data.Retention
+import com.usage.claudewidget.work.RefreshScheduler
 import com.usage.claudewidget.widget.TimeFmt
 import com.usage.claudewidget.widget.UsageWidget
 import kotlinx.coroutines.Dispatchers
@@ -231,9 +233,17 @@ private fun SetupScreen() {
 
             Section(
                 title = "Background refresh",
-                body = "The widget refreshes every 15 minutes and notifies you when the 5-hour " +
-                    "window resets. Tap it once to refresh, three times to open Claude.",
+                body = "The widget refreshes in the background and notifies you when the 5-hour " +
+                    "window resets. Tap it once to refresh, three times to open Claude. Longer " +
+                    "intervals save battery and requests; Android may delay any of them a little.",
             ) {
+                var interval by remember { mutableStateOf(storage.refreshIntervalMin) }
+                Text("Refresh every", style = MaterialTheme.typography.labelLarge)
+                ChipRow(INTERVAL_OPTIONS, interval) {
+                    interval = it
+                    storage.refreshIntervalMin = it
+                    RefreshScheduler.ensurePeriodic(context, reschedule = true)
+                }
                 FilledTonalButton(
                     onClick = { requestBatteryExemption(context) },
                     modifier = Modifier.fillMaxWidth(),
@@ -251,6 +261,7 @@ private fun SetupScreen() {
     }
 }
 
+private val INTERVAL_OPTIONS = listOf(15 to "15 min", 30 to "30 min", 60 to "1 hour", 120 to "2 hours")
 private val AGE_OPTIONS = listOf(7 to "1 week", 28 to "4 weeks", 84 to "12 weeks", 365 to "1 year", 0 to "Forever")
 private val SIZE_OPTIONS = listOf(256 to "256 KB", 1024 to "1 MB", 5120 to "5 MB", 0 to "No limit")
 
@@ -262,6 +273,21 @@ private fun RetentionSection(storage: Storage) {
     var maxDays by remember { mutableStateOf(storage.historyMaxDays) }
     var maxKb by remember { mutableStateOf(storage.historyMaxKb) }
     var size by remember { mutableLongStateOf(0L) }
+    // A tighter limit that would delete rows waits here until the user confirms it.
+    var pending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun choose(days: Int, kb: Int) {
+        val r = Retention(days * 86_400_000L, kb * 1024L)
+        scope.launch {
+            if (withContext(Dispatchers.IO) { history.wouldDrop(r) }) {
+                pending = days to kb
+            } else {
+                maxDays = days; maxKb = kb
+                storage.historyMaxDays = days; storage.historyMaxKb = kb
+            }
+        }
+    }
 
     LaunchedEffect(maxDays, maxKb) {
         size = withContext(Dispatchers.IO) {
@@ -276,9 +302,30 @@ private fun RetentionSection(storage: Storage) {
             "limit is reached. Charts use the last 12 weeks. Using ${formatSize(size)}.",
     ) {
         Text("Keep data for", style = MaterialTheme.typography.labelLarge)
-        ChipRow(AGE_OPTIONS, maxDays) { maxDays = it; storage.historyMaxDays = it }
+        ChipRow(AGE_OPTIONS, maxDays) { choose(it, maxKb) }
         Text("Maximum size", style = MaterialTheme.typography.labelLarge)
-        ChipRow(SIZE_OPTIONS, maxKb) { maxKb = it; storage.historyMaxKb = it }
+        ChipRow(SIZE_OPTIONS, maxKb) { choose(maxDays, it) }
+    }
+
+    pending?.let { (days, kb) ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("Delete old data?") },
+            text = {
+                Text("This limit is smaller than the history you have now. The rows past it " +
+                    "will be deleted permanently. Export a CSV first if you want to keep them.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    maxDays = days; maxKb = kb
+                    storage.historyMaxDays = days; storage.historyMaxKb = kb
+                    pending = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 

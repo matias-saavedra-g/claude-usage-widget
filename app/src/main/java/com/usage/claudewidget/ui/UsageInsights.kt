@@ -73,10 +73,7 @@ private fun ForecastCard(p: Prediction, insights: Insights) {
         val run = UsagePredictor.windows(insights.samples, p.kind).lastOrNull()
             ?.takeIf { kotlin.math.abs(it.resetMs - p.resetMs) <= 30 * 60_000L }
         val points = run?.samples.orEmpty().map { ChartPoint(it.t, p.kind.util(it)) } + ChartPoint(now, p.util)
-        val projEnd = p.limitAtMs ?: p.resetMs
-        val projection = if (p.pctPerHour > 0) {
-            listOf(ChartPoint(now, p.util), ChartPoint(projEnd, p.projectedAtReset.toFloat().let { if (p.willHitLimit) 100f else it }))
-        } else emptyList()
+        val projection = p.curve.map { (t, u) -> ChartPoint(t, u.toFloat()) }
         val f = if (p.kind == WindowKind.FIVE_HOUR) clock else dayClock
         UsageLineChart(
             series = listOf(points),
@@ -91,7 +88,15 @@ private fun ForecastCard(p: Prediction, insights: Insights) {
         if (p.methods.isNotEmpty()) {
             HorizontalDivider()
             p.methods.forEach { MethodRow(it.name, it.pctPerHour, p.kind) }
-            MethodRow("Mean (used for forecast)", p.pctPerHour, p.kind, emphasize = true)
+            MethodRow(if (p.usesPattern) "Current pace" else "Mean (used for forecast)", p.pctPerHour, p.kind, emphasize = true)
+            if (p.usesPattern) {
+                Text(
+                    "The forecast starts at the current pace and blends into your usual usage " +
+                        "for each hour of the week, so quiet nights and busy days are accounted for.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
