@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.webkit.WebSettings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +34,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -44,6 +47,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -63,6 +67,7 @@ import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Storage
 import com.usage.claudewidget.data.UsageHistory
 import com.usage.claudewidget.data.UsageRepository
+import java.time.LocalDate
 import com.usage.claudewidget.widget.TimeFmt
 import com.usage.claudewidget.widget.UsageWidget
 import kotlinx.coroutines.Dispatchers
@@ -222,6 +227,8 @@ private fun SetupScreen() {
                 OrganizationRow(status.orgId, status.signedIn)
             }
 
+            RetentionSection(storage)
+
             Section(
                 title = "Background refresh",
                 body = "The widget refreshes every 15 minutes and notifies you when the 5-hour " +
@@ -238,8 +245,89 @@ private fun SetupScreen() {
                     ) { Text("Allow on-time reset notification") }
                 }
             }
+
+            ExportButton()
         }
     }
+}
+
+private val AGE_OPTIONS = listOf(7 to "1 week", 28 to "4 weeks", 84 to "12 weeks", 365 to "1 year", 0 to "Forever")
+private val SIZE_OPTIONS = listOf(256 to "256 KB", 1024 to "1 MB", 5120 to "5 MB", 0 to "No limit")
+
+/** Lets the user cap the stored history by age and by size; whichever is hit first applies. */
+@Composable
+private fun RetentionSection(storage: Storage) {
+    val context = LocalContext.current
+    val history = remember { UsageHistory.get(context) }
+    var maxDays by remember { mutableStateOf(storage.historyMaxDays) }
+    var maxKb by remember { mutableStateOf(storage.historyMaxKb) }
+    var size by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(maxDays, maxKb) {
+        size = withContext(Dispatchers.IO) {
+            history.enforce(storage.retention)
+            history.sizeBytes()
+        }
+    }
+
+    Section(
+        title = "Data retention",
+        body = "Choose how much usage history to keep. Older rows are deleted once either " +
+            "limit is reached. Charts use the last 12 weeks. Using ${formatSize(size)}.",
+    ) {
+        Text("Keep data for", style = MaterialTheme.typography.labelLarge)
+        ChipRow(AGE_OPTIONS, maxDays) { maxDays = it; storage.historyMaxDays = it }
+        Text("Maximum size", style = MaterialTheme.typography.labelLarge)
+        ChipRow(SIZE_OPTIONS, maxKb) { maxKb = it; storage.historyMaxKb = it }
+    }
+}
+
+@Composable
+private fun ChipRow(options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for ((value, label) in options) {
+            FilterChip(
+                selected = value == selected,
+                onClick = { onSelect(value) },
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+private fun formatSize(bytes: Long): String = when {
+    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024))
+    else -> "${(bytes + 1023) / 1024} KB"
+}
+
+/** Saves the whole history as a CSV file wherever the user picks, for use in other apps. */
+@Composable
+private fun ExportButton() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use {
+                        UsageHistory.get(context).exportCsv(it)
+                    }
+                }.isSuccess
+            }
+            val text = if (ok) "Usage history exported." else "Export failed."
+            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        }
+    }
+    OutlinedButton(
+        onClick = { launcher.launch("claude-usage-${LocalDate.now()}.csv") },
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text("Export data as CSV") }
 }
 
 @Composable
