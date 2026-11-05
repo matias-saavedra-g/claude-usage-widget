@@ -34,6 +34,14 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 3. If you have the original app installed, uninstall it first. The two are signed with different keys.
 4. Builds from version 1.1 on are signed with the fixed key in `app/debug.keystore`, so later builds install as updates. A build older than 1.1 was signed with a random key, so uninstall it once before installing 1.1.
 
+### Install and update with Obtainium
+
+[Obtainium](https://github.com/ImranR98/Obtainium) installs the APK straight from GitHub Releases and notifies you of new versions. With Obtainium installed, tap:
+
+[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/matias-saavedra-g/claude-usage-widget)
+
+Or open Obtainium, tap **Add app** and paste `https://github.com/matias-saavedra-g/claude-usage-widget` as the source URL.
+
 ## Setup
 
 1. In a desktop browser signed in to [claude.ai](https://claude.ai), open DevTools → Application → Cookies → `https://claude.ai` and copy the value of `sessionKey` (starts with `sk-ant-sid`).
