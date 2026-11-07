@@ -2,6 +2,8 @@ package com.usage.claudewidget.ui
 
 import android.Manifest
 import android.app.AlarmManager
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -73,6 +75,7 @@ import com.usage.claudewidget.data.Retention
 import com.usage.claudewidget.work.RefreshScheduler
 import com.usage.claudewidget.widget.TimeFmt
 import com.usage.claudewidget.widget.UsageWidget
+import com.usage.claudewidget.widget.UsageWidgetReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -232,6 +235,8 @@ private fun SetupScreen() {
                 OrganizationRow(status.orgId, status.signedIn)
             }
 
+            WidgetSection()
+
             RetentionSection(storage)
 
             Section(
@@ -260,6 +265,28 @@ private fun SetupScreen() {
             }
 
             ExportButton()
+        }
+    }
+}
+
+/** Explains widget sizes and styles, with a shortcut to place one. */
+@Composable
+private fun WidgetSection() {
+    val context = LocalContext.current
+    val manager = remember { AppWidgetManager.getInstance(context) }
+    Section(
+        title = "Home screen widget",
+        body = "Resize the widget from 1×1 up to 5×3: it shows more detail as it grows. To pick " +
+            "bars, columns, rings or numbers, which limits to show, and the background, " +
+            "long-press the widget and open its settings (Reconfigure).",
+    ) {
+        if (manager.isRequestPinAppWidgetSupported) {
+            FilledTonalButton(
+                onClick = {
+                    manager.requestPinAppWidget(ComponentName(context, UsageWidgetReceiver::class.java), null, null)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Add widget to home screen") }
         }
     }
 }

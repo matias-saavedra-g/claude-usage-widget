@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="stale">#FFE0A000</color>
+    <!-- Base of the translucent widget background. Matches Glance's widgetBackground
+         fallback below Android 12; values-v31 switches to wallpaper (dynamic) colors. -->
+    <color name="widget_bg_base">#FFE0F3FF</color>
 </resources>

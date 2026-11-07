@@ -1,16 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sizes follow Android's widget sizing guide (typical 5x4 handset: n cells are about
+  73n-16 dp wide in portrait and 66m-15 dp tall in landscape).
+  - Default drop size 2x2 (minWidth/minHeight is the fallback below Android 12).
+  - Resizable from 1x1 to about 5x3 (portrait); every size in between gets its own layout.
+    Height is capped where more room would only add empty space (quality guide WL-4.1).
+  - The style screen opens from the widget's long-press menu (Reconfigure / Widget settings).
+    configuration_optional skips it when the widget is first placed (Android 12+).
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="40dp"
-    android:minHeight="40dp"
-    android:targetCellWidth="1"
-    android:targetCellHeight="1"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
     android:minResizeWidth="40dp"
     android:minResizeHeight="40dp"
-    android:maxResizeWidth="320dp"
-    android:maxResizeHeight="240dp"
+    android:maxResizeWidth="420dp"
+    android:maxResizeHeight="360dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
     android:description="@string/widget_description"
+    android:configure="com.usage.claudewidget.widget.WidgetConfigActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional"
     android:initialLayout="@layout/glance_default_loading_layout"
-    android:previewImage="@drawable/ic_star" />
+    android:previewImage="@drawable/widget_preview" />
