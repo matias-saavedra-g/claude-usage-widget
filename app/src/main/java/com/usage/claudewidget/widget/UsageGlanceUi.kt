@@ -1,36 +1,42 @@
 package com.usage.claudewidget.widget
 
+import android.content.Intent
+import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.LinearProgressIndicator
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
-import androidx.glance.LocalContext
-import android.content.Intent
-import android.os.Build
 import com.usage.claudewidget.R
 import com.usage.claudewidget.ui.MainActivity
 
@@ -43,15 +49,74 @@ data class WidgetState(
     val sevenDayPct: Int,
     val sevenDayResets: String,
     val stale: Boolean,
+    /** Local time of the last successful fetch, e.g. "14:05", or "" if unknown. */
+    val updatedAt: String = "",
 )
 
-private val COMPACT_MAX_WIDTH = 130.dp
+/** One usage limit as the layouts draw it. */
+internal data class Meter(
+    /** "5H" / "1W". */
+    val short: String,
+    /** "5-hour" / "Weekly". */
+    val long: String,
+    val pct: Int,
+    /** "3h 12m"; see [TimeFmt.resetsIn]. */
+    val resets: String,
+)
 
+internal fun WidgetState.meters(metrics: WidgetMetrics): List<Meter> {
+    val five = Meter("5H", "5-hour", fiveHourPct, fiveHourResets)
+    val week = Meter("1W", "Weekly", sevenDayPct, sevenDayResets)
+    return when (metrics) {
+        WidgetMetrics.BOTH -> listOf(five, week)
+        WidgetMetrics.FIVE_HOUR -> listOf(five)
+        WidgetMetrics.WEEKLY -> listOf(week)
+    }
+}
+
+/*
+ * Size classes. Breakpoints follow the cell sizes in Android's widget sizing guide
+ * (portrait width 73n-16 dp, landscape height 66m-15 dp on a typical 5x4 handset):
+ * one cell is about 57x51 dp, two cells 130x117 dp, three cells about 203x184 dp.
+ * One row in portrait is about 102 dp tall, so it still counts as SHORT.
+ */
+internal enum class WidthClass { NARROW, MEDIUM, WIDE }
+
+/**
+ * LOW and SHORT are both one row: LOW is the landscape case (about 51 dp), SHORT the portrait
+ * case (about 102 dp), which has room for larger type.
+ */
+internal enum class HeightClass { LOW, SHORT, MEDIUM, TALL;
+    val oneRow: Boolean get() = this == LOW || this == SHORT
+}
+
+internal object WidgetSizes {
+    private val widths = listOf(48.dp, 110.dp, 200.dp)
+    private val heights = listOf(48.dp, 80.dp, 110.dp, 200.dp)
+
+    /** Every width/height combination: one responsive layout per size class. */
+    val responsive: Set<DpSize> = widths.flatMap { w -> heights.map { h -> DpSize(w, h) } }.toSet()
+
+    fun widthClass(w: Dp) = when {
+        w >= widths[2] -> WidthClass.WIDE
+        w >= widths[1] -> WidthClass.MEDIUM
+        else -> WidthClass.NARROW
+    }
+
+    fun heightClass(h: Dp) = when {
+        h >= heights[3] -> HeightClass.TALL
+        h >= heights[2] -> HeightClass.MEDIUM
+        h >= heights[1] -> HeightClass.SHORT
+        else -> HeightClass.LOW
+    }
+}
 
 @Composable
-fun UsageWidgetContent(state: WidgetState) {
+fun UsageWidgetContent(state: WidgetState, config: WidgetConfig = WidgetConfig.DEFAULT) {
     val size = LocalSize.current
-    val compact = size.width < COMPACT_MAX_WIDTH
+    val w = WidgetSizes.widthClass(size.width)
+    val h = WidgetSizes.heightClass(size.height)
+    val tiny = w == WidthClass.NARROW || h.oneRow
     val context = LocalContext.current
 
     val tap = if (state.needsLogin) {
@@ -64,19 +129,36 @@ fun UsageWidgetContent(state: WidgetState) {
         modifier = GlanceModifier
             .fillMaxSize()
             .appWidgetBackground()
-            .background(GlanceTheme.colors.widgetBackground)
+            .widgetBackground(config.background)
             .widgetCorners()
-            .padding(if (compact) 8.dp else 12.dp)
+            .padding(
+                horizontal = if (w == WidthClass.NARROW) 6.dp else if (tiny) 8.dp else 12.dp,
+                vertical = if (tiny) 8.dp else 12.dp,
+            )
             .clickable(tap),
     ) {
         when {
-            state.needsLogin -> SignInPrompt(compact)
-            !state.hasData -> Loading(compact)
-            compact -> CompactLayout(state)
-            else -> FullLayout(state)
+            state.needsLogin -> SignInPrompt(tiny)
+            !state.hasData -> Loading()
+            else -> {
+                val meters = state.meters(config.metrics)
+                when (config.style) {
+                    WidgetStyle.BARS -> BarsStyle(meters, w, h, state.updatedAt)
+                    WidgetStyle.COLUMNS -> ColumnsStyle(meters, w, h)
+                    WidgetStyle.RINGS -> RingsStyle(meters, w, h)
+                    WidgetStyle.NUMBERS -> NumbersStyle(meters, w, h)
+                }
+            }
         }
         if (state.hasData && state.stale) StaleDot()
     }
+}
+
+@Composable
+private fun GlanceModifier.widgetBackground(bg: WidgetBackground): GlanceModifier = when (bg) {
+    WidgetBackground.SOLID -> background(GlanceTheme.colors.widgetBackground)
+    WidgetBackground.TRANSLUCENT -> background(ImageProvider(R.drawable.widget_bg_translucent))
+    WidgetBackground.NONE -> this
 }
 
 /** System widget corner radius on Android 12+, matching other Material You widgets. */
@@ -87,96 +169,137 @@ private fun GlanceModifier.widgetCorners(): GlanceModifier =
         cornerRadius(16.dp)
     }
 
+// ---- Shared building blocks -------------------------------------------------------------
+
+/** Usage at or above this is drawn in the error color. */
+private const val HIGH_PCT = 90
+
 @Composable
-private fun FullLayout(s: WidgetState) {
-    Column(modifier = GlanceModifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Logo(22.dp)
+internal fun usageColor(pct: Int, normal: ColorProvider = GlanceTheme.colors.primary): ColorProvider =
+    if (pct >= HIGH_PCT) GlanceTheme.colors.error else normal
+
+@Composable
+internal fun PctText(
+    pct: Int,
+    size: TextUnit,
+    modifier: GlanceModifier = GlanceModifier,
+    align: TextAlign = TextAlign.Start,
+) {
+    Text(
+        "$pct%",
+        modifier = modifier,
+        maxLines = 1,
+        style = TextStyle(
+            color = GlanceTheme.colors.onSurface,
+            fontSize = size,
+            fontWeight = FontWeight.Bold,
+            textAlign = align,
+        ),
+    )
+}
+
+/** Secondary text: labels and reset times. */
+@Composable
+internal fun Caption(
+    text: String,
+    size: TextUnit = 12.sp,
+    modifier: GlanceModifier = GlanceModifier,
+    bold: Boolean = false,
+    align: TextAlign = TextAlign.Start,
+) {
+    Text(
+        text,
+        modifier = modifier,
+        maxLines = 1,
+        style = TextStyle(
+            color = GlanceTheme.colors.onSurfaceVariant,
+            fontSize = size,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            textAlign = align,
+        ),
+    )
+}
+
+/** Logo and title. The title is dropped on narrow widgets. */
+@Composable
+internal fun Header(w: WidthClass) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Logo(18.dp)
+        if (w != WidthClass.NARROW) {
             Spacer(GlanceModifier.width(6.dp))
             Text(
                 "Claude usage",
+                maxLines = 1,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurface,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                 ),
             )
         }
-        Spacer(GlanceModifier.height(10.dp))
-        MeterRow("5H", s.fiveHourPct, s.fiveHourResets)
-        Spacer(GlanceModifier.height(10.dp))
-        MeterRow("1W", s.sevenDayPct, s.sevenDayResets)
     }
 }
 
+/** Horizontal bar. Pass a width or weight in [modifier]. */
 @Composable
-private fun MeterRow(label: String, pct: Int, resets: String) {
-    Column(modifier = GlanceModifier.fillMaxWidth()) {
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                label,
-                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontWeight = FontWeight.Bold),
-                modifier = GlanceModifier.width(28.dp),
-            )
-            Text(
-                "$pct%",
-                style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Bold),
-            )
-            Spacer(GlanceModifier.defaultWeight())
-            Text(
-                "resets in $resets",
-                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant),
-            )
-        }
-        Spacer(GlanceModifier.height(4.dp))
-        Bar(pct)
-    }
-}
-
-@Composable
-private fun CompactLayout(s: WidgetState) {
-    Column(modifier = GlanceModifier.fillMaxSize()) {
-        Logo(16.dp)
-        Spacer(GlanceModifier.height(6.dp))
-        CompactMeter("5H", s.fiveHourPct)
-        Spacer(GlanceModifier.height(6.dp))
-        CompactMeter("1W", s.sevenDayPct)
-    }
-}
-
-@Composable
-private fun CompactMeter(label: String, pct: Int) {
-    Column(modifier = GlanceModifier.fillMaxWidth()) {
-        Row(modifier = GlanceModifier.fillMaxWidth()) {
-            Text(
-                label,
-                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontWeight = FontWeight.Bold),
-            )
-            Spacer(GlanceModifier.defaultWeight())
-            Text(
-                "$pct%",
-                style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Bold),
-            )
-        }
-        Spacer(GlanceModifier.height(3.dp))
-        Bar(pct)
-    }
-}
-
-@Composable
-private fun Bar(pct: Int) {
+internal fun HBar(pct: Int, thickness: Dp, modifier: GlanceModifier) {
     LinearProgressIndicator(
-        progress = (pct.coerceIn(0, 100)) / 100f,
-        modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
-        color = GlanceTheme.colors.primary,
+        progress = pct.coerceIn(0, 100) / 100f,
+        modifier = modifier.height(thickness).cornerRadius(thickness / 2),
+        color = usageColor(pct),
         backgroundColor = GlanceTheme.colors.secondaryContainer,
     )
 }
 
+/** Vertical bar filling from the bottom. Pass a width and a height or weight in [modifier]. */
 @Composable
-private fun Logo(s: androidx.compose.ui.unit.Dp) {
+internal fun VBar(pct: Int, thickness: Dp, modifier: GlanceModifier) {
+    Box(
+        modifier = modifier
+            .width(thickness)
+            .background(GlanceTheme.colors.secondaryContainer)
+            .cornerRadius(thickness / 2),
+    ) {
+        Image(
+            provider = ImageProvider(WidgetBitmaps.columnFill(pct)),
+            contentDescription = null,
+            modifier = GlanceModifier.fillMaxSize().cornerRadius(thickness / 2),
+            contentScale = ContentScale.FillBounds,
+            colorFilter = ColorFilter.tint(usageColor(pct)),
+        )
+    }
+}
+
+/**
+ * Circular gauge that scales to fill [modifier]'s bounds (it stays round), with optional
+ * centered text.
+ */
+@Composable
+internal fun Ring(
+    pct: Int,
+    modifier: GlanceModifier,
+    center: (@Composable () -> Unit)? = null,
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        RingLayer(WidgetBitmaps.ringTrack(), GlanceTheme.colors.secondaryContainer)
+        RingLayer(WidgetBitmaps.ring(pct), usageColor(pct))
+        center?.invoke()
+    }
+}
+
+@Composable
+internal fun RingLayer(bitmap: android.graphics.Bitmap, color: ColorProvider) {
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        modifier = GlanceModifier.fillMaxSize(),
+        contentScale = ContentScale.Fit,
+        colorFilter = ColorFilter.tint(color),
+    )
+}
+
+@Composable
+internal fun Logo(s: Dp) {
     Image(
         provider = ImageProvider(R.drawable.ic_star),
         contentDescription = "Claude",
@@ -185,23 +308,28 @@ private fun Logo(s: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun SignInPrompt(compact: Boolean) {
+private fun SignInPrompt(tiny: Boolean) {
     Column(
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Logo(if (compact) 18.dp else 24.dp)
-        Spacer(GlanceModifier.height(6.dp))
+        Logo(if (tiny) 14.dp else 24.dp)
+        Spacer(GlanceModifier.height(if (tiny) 2.dp else 6.dp))
         Text(
-            if (compact) "Sign in" else "Tap to sign in",
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium),
+            if (tiny) "Sign in" else "Tap to sign in",
+            maxLines = 1,
+            style = TextStyle(
+                color = GlanceTheme.colors.onSurface,
+                fontSize = if (tiny) 12.sp else 14.sp,
+                fontWeight = FontWeight.Medium,
+            ),
         )
     }
 }
 
 @Composable
-private fun Loading(compact: Boolean) {
+private fun Loading() {
     Column(
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
@@ -217,11 +345,10 @@ private fun StaleDot() {
         modifier = GlanceModifier.fillMaxSize().padding(2.dp),
         contentAlignment = Alignment.TopEnd,
     ) {
-        Box(
-            modifier = GlanceModifier
-                .size(8.dp)
-                .cornerRadius(4.dp)
-                .background(ColorProvider(R.color.stale)),
-        ) {}
+        Image(
+            provider = ImageProvider(R.drawable.stale_dot),
+            contentDescription = "Out of date",
+            modifier = GlanceModifier.size(8.dp),
+        )
     }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget background at 70% opacity, so the wallpaper shows through while text keeps
+     enough contrast. Resolved by the launcher, so it follows light/dark and wallpaper colors. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.70" android:color="@color/widget_bg_base" />
+</selector>

@@ -20,6 +20,7 @@ Maintained by [Matías Saavedra](https://github.com/matias-saavedra-g). Forked f
 - A notification tells you when the 5-hour window resets.
 - Material 3 design that follows the system theme: light or dark, and wallpaper colors (Material You) on Android 12 or newer, in both the app and the widget.
 - Usage tracker in the app: charts of the current 5-hour and weekly windows, every 5-hour session of the last 7 days, and peak usage per week. A forecast says whether you run out before the reset at your current pace, or that you are OK.
+- Four widget styles (bars, columns, rings, numbers) that adapt from 1×1 to 5×3. Each widget can show both limits or just one, on a solid, translucent or transparent background.
 - A four-point orange star replaces the lobster icon (source: `docs/logo.svg`).
 
 ## Requirements
@@ -48,15 +49,32 @@ Or open Obtainium, tap **Add app** and paste `https://github.com/matias-saavedra
 2. In the app, paste it, tap **Save session key**, then **Test fetch now**. The percentages should match [claude.ai/settings/usage](https://claude.ai/settings/usage).
 3. Tap **Disable battery optimization** so Android does not stop the background refresh.
 4. Allow notifications when asked. On Android 12 or newer, tap **Allow on-time reset notification** if it appears, so the reset notification is not delayed.
-5. Add the **Claude Usage** widget to your home screen. Tap it once to refresh, or three times quickly to open the Claude app (or claude.ai if the app is not installed).
+5. Add the **Claude Usage** widget to your home screen, or tap **Add widget to home screen** in the app. Tap it once to refresh, or three times quickly to open the Claude app (or claude.ai if the app is not installed).
+6. To change its style, long-press the widget and open its settings (**Reconfigure** on Android 12 or newer). Resize it to show more or less detail.
 
 The session key expires after a few weeks, or when you sign out of claude.ai in that browser. When the widget says to sign in, paste a new key.
+
+## Widget sizes and styles
+
+<p align="center"><img src="docs/widget-styles.png" alt="The four widget styles at 1×1, 2×1, 4×1, 2×2 and 4×2" width="800" /></p>
+
+The widget drops in at 2×2 and resizes from 1×1 to about 5×3. It does not just scale up: each size gets its own layout, following Android's [widget quality guidelines](https://developer.android.com/design/ui/mobile/guides/widgets/widget_quality_guide). Small sizes show only the percentages. Larger sizes add labels, reset times, a header and the time of the last update. One-row widgets have a compact layout for landscape and a roomier one for portrait.
+
+Long-press a widget and open its settings to choose, for that widget only:
+
+| Setting | Options |
+| --- | --- |
+| Style | **Bars** (horizontal progress bars), **Columns** (vertical bars, good for tall widgets), **Rings** (circular gauges), **Numbers** (large percentages, no graphics) |
+| Show | 5-hour and weekly, 5-hour only, or weekly only. One limit leaves more room for it on a 1×1 widget. |
+| Background | Solid, translucent (wallpaper shows through), or none |
+
+The settings screen has a live preview at several sizes. Every style follows the system light or dark theme and, on Android 12 or newer, the wallpaper colors and the launcher's corner radius. A limit at 90% or more turns red. Widgets placed before version 1.5 keep the bars style until you change it.
 
 ## How it works
 
 The app calls `claude.ai/api/organizations/{orgId}/usage`, the same undocumented endpoint the claude.ai usage page uses, with your `sessionKey` cookie. It finds your organization ID on its own. When Cloudflare blocks a request, the app loads claude.ai in a hidden WebView to get a new `cf_clearance` cookie and retries. A background job refreshes every 15 minutes. After each fetch the app sets an alarm for the 5-hour reset time and posts a notification when it fires. If the alarm was lost, for example after a reboot, the next refresh sends the notification instead.
 
-The widget has a compact and a full layout depending on its size, and follows the system theme, including wallpaper colors on Android 12 or newer. An amber dot means the data is out of date.
+An amber dot on the widget means the data is out of date.
 
 Every successful fetch is also appended to a small history file (about 400 KB for 12 weeks). The app keeps 12 weeks of history and moves older rows to an archive file. The forecast computes a burn rate with up to four methods and uses their mean: usage so far over time since the window opened, the least-squares trend over the last hour (5-hour) or day (weekly), an exponentially smoothed rate between fetches, and the average rate of past windows. Methods without enough data are skipped.
 
@@ -78,12 +96,14 @@ Requires JDK 17 and the Android SDK with platform 36.
 2. Run `./gradlew :app:assembleDebug`.
 3. Install with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
 
+`./gradlew :app:testDebugUnitTest` renders every widget style at common launcher sizes, in light and dark theme, with Robolectric (no emulator needed). It fails if any text is cut off, and writes contact sheets to `app/build/widget-renders/`.
+
 | Path | Contents |
 | --- | --- |
 | `data/` | Usage history and forecasts, endpoints, encrypted storage, cookie handling, Cloudflare retry, fetch logic |
 | `auth/LoginActivity.kt` | WebView login |
 | `ui/MainActivity.kt` | Main screen: usage, refresh, session key entry |
 | `ui/UsageInsights.kt`, `ui/UsageCharts.kt` | Forecast cards and charts |
-| `widget/` | Widget layouts |
+| `widget/` | Widget layouts and styles (`WidgetStyles.kt`), size classes (`UsageGlanceUi.kt`), per-widget settings and the settings screen (`WidgetConfig*.kt`) |
 | `work/` | Background refresh |
 | `notify/` | 5-hour reset alarm and notification |

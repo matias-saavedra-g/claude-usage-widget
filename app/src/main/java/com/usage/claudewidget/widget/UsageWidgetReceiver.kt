@@ -1,7 +1,6 @@
 package com.usage.claudewidget.widget
 
 import android.content.Context
-import android.content.Intent
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import com.usage.claudewidget.work.RefreshScheduler
@@ -25,7 +24,8 @@ class UsageWidgetReceiver : GlanceAppWidgetReceiver() {
         RefreshScheduler.ensurePeriodic(context)
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        WidgetConfigStore.get(context).remove(appWidgetIds)
     }
 }

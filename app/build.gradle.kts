@@ -25,8 +25,8 @@ android {
         applicationId = "com.usage.claudewidget"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.4.0"
+        versionCode = 9
+        versionName = "1.5.0"
     }
 
     signingConfigs {
@@ -69,6 +69,9 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     buildFeatures { compose = true }
+
+    // Robolectric renders the widget layouts to PNGs (WidgetRenderTest).
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -98,4 +101,9 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Widget render tests (JVM, no emulator needed)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }
